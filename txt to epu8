@@ -1,0 +1,97 @@
+# -*- coding: utf-8 -*-
+"""
+TXT转EPUB 本地图形版
+依赖：pip install ebooklib
+自带GUI界面，纯本地运行，一键转换
+"""
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from ebooklib import epub
+import os
+
+# -------------------------- 核心转换函数 --------------------------
+def txt_to_epub(txt_path, save_path):
+    try:
+        # 读取TXT文件（兼容常见编码）
+        try:
+            with open(txt_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except:
+            with open(txt_path, 'r', encoding='gbk') as f:
+                content = f.read()
+
+        # 创建EPUB书籍
+        book = epub.EpubBook()
+        book.set_title(os.path.basename(txt_path).replace('.txt', ''))  # 书名
+        book.set_language('zh')  # 语言：中文
+
+        # 创建章节
+        chapter = epub.EpubHtml(title='正文', file_name='text.xhtml', lang='zh')
+        chapter.content = f'<html><body><p>{content.replace(chr(10), "<br>")}</p></body></html>'
+        book.add_item(chapter)
+        book.spine = [chapter]
+
+        # 保存EPUB文件
+        epub.write_epub(save_path, book, {})
+        return True
+
+    except Exception as e:
+        print(f"转换失败：{str(e)}")
+        return False
+
+# -------------------------- GUI界面功能 --------------------------
+class Txt2EpubGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("📄 TXT转EPUB 本地转换器")
+        self.root.geometry("500x220")
+        self.root.resizable(False, False)
+
+        self.txt_path = ""  # 选中的TXT文件路径
+
+        # 界面组件
+        tk.Label(root, text="TXT转EPUB 一键转换工具", font=("微软雅黑", 16)).pack(pady=15)
+        self.btn_select = tk.Button(root, text="1. 选择本地TXT文件", command=self.select_file, width=25, height=2)
+        self.btn_select.pack(pady=5)
+
+        self.btn_convert = tk.Button(root, text="2. 开始转换为EPUB", command=self.convert_file, width=25, height=2, bg="#4CAF50", fg="white")
+        self.btn_convert.pack(pady=5)
+
+        self.status_label = tk.Label(root, text="状态：等待操作...", font=("微软雅黑", 10))
+        self.status_label.pack(pady=10)
+
+    # 选择TXT文件
+    def select_file(self):
+        path = filedialog.askopenfilename(
+            title="选择TXT文件",
+            filetypes=[("文本文档", "*.txt"), ("所有文件", "*.*")]
+        )
+        if path:
+            self.txt_path = path
+            self.status_label.config(text=f"已选择：{os.path.basename(path)}")
+
+    # 执行转换
+    def convert_file(self):
+        if not self.txt_path:
+            messagebox.showwarning("提示", "请先选择TXT文件！")
+            return
+
+        # 生成保存路径（同目录，同名.epub）
+        save_path = self.txt_path.replace(".txt", ".epub")
+        self.status_label.config(text="状态：正在转换中...")
+        self.root.update()
+
+        # 调用转换函数
+        result = txt_to_epub(self.txt_path, save_path)
+        if result:
+            self.status_label.config(text=f"状态：转换成功！\n文件保存在：{save_path}")
+            messagebox.showinfo("成功", "EPUB文件已生成！")
+        else:
+            self.status_label.config(text="状态：转换失败！")
+            messagebox.showerror("失败", "文件转换出错，请检查TXT文件！")
+
+# -------------------------- 启动程序 --------------------------
+if __name__ == "__main__":
+    window = tk.Tk()
+    app = Txt2EpubGUI(window)
+    window.mainloop()
