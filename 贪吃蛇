@@ -1,0 +1,372 @@
+import pygame
+import random
+import sys
+import os
+
+# ======================================
+# 初始化Pygame 与 音频系统
+# ======================================
+pygame.init()
+pygame.mixer.init()
+
+# ======================================
+# 全局常量配置（可自由修改）
+# ======================================
+WINDOW_WIDTH = 800
+WINDOW_HEIGHT = 600
+BLOCK_SIZE = 25
+BASE_SPEED = 8
+MAX_SPEED = 20
+FONT_PATH = None  # 使用系统默认字体
+
+# 颜色配置（高级渐变配色）
+BG_COLOR = (20, 20, 30)
+BORDER_MAIN = (100, 100, 255)
+BORDER_SUB = (50, 50, 100)
+SNAKE_HEAD = (0, 255, 180)
+SNAKE_BODY = [
+    (0, 220, 150),
+    (0, 190, 120),
+    (0, 160, 90)
+]
+FOOD_NORMAL = (255, 80, 80)
+FOOD_BONUS = (255, 215, 0)
+TEXT_COLOR = (255, 255, 255)
+TIP_COLOR = (180, 180, 180)
+
+# 游戏文件配置（最高分存档）
+SAVE_FILE = "snake_highscore.txt"
+GRID_ENABLED = True
+
+# ======================================
+# 窗口设置
+# ======================================
+screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+pygame.display.set_caption("🐍 豪华版贪吃蛇 - 全功能完整版")
+clock = pygame.time.Clock()
+
+# ======================================
+# 字体加载
+# ======================================
+font_title = pygame.font.SysFont(FONT_PATH, 60, bold=True)
+font_normal = pygame.font.SysFont(FONT_PATH, 32)
+font_small = pygame.font.SysFont(FONT_PATH, 24)
+font_tip = pygame.font.SysFont(FONT_PATH, 20)
+
+# ======================================
+# 音效加载（内置音效，无需外部文件）
+# ======================================
+def play_sound(sound_type):
+    try:
+        if sound_type == "eat":
+            sound = pygame.mixer.Sound(pygame.sndarray.make_sound(
+                bytearray(b'\x00\x00\x80\x00\x80\x00\x00\x00')))
+        elif sound_type == "die":
+            sound = pygame.mixer.Sound(pygame.sndarray.make_sound(
+                bytearray(b'\x00\x00\x00\x80\x00\x80\x00\x00')))
+        elif sound_type == "start":
+            sound = pygame.mixer.Sound(pygame.sndarray.make_sound(
+                bytearray(b'\x80\x00\x00\x00\x00\x00\x80\x00')))
+        sound.set_volume(0.3)
+        sound.play()
+    except:
+        pass
+
+# ======================================
+# 最高分存档功能
+# ======================================
+def load_high_score():
+    if os.path.exists(SAVE_FILE):
+        with open(SAVE_FILE, "r") as f:
+            return int(f.read())
+    return 0
+
+def save_high_score(score):
+    high = load_high_score()
+    if score > high:
+        with open(SAVE_FILE, "w") as f:
+            f.write(str(score))
+
+# ======================================
+# 绘制工具函数
+# ======================================
+def draw_grid():
+    """绘制网格背景"""
+    if not GRID_ENABLED:
+        return
+    for x in range(0, WINDOW_WIDTH, BLOCK_SIZE):
+        pygame.draw.line(screen, (40,40,50), (x,0), (x, WINDOW_HEIGHT), 1)
+    for y in range(0, WINDOW_HEIGHT, BLOCK_SIZE):
+        pygame.draw.line(screen, (40,40,50), (0,y), (WINDOW_WIDTH, y), 1)
+
+def draw_border():
+    """绘制双层边框"""
+    pygame.draw.rect(screen, BORDER_MAIN, (5,5,WINDOW_WIDTH-10,WINDOW_HEIGHT-10), 3)
+    pygame.draw.rect(screen, BORDER_SUB, (15,15,WINDOW_WIDTH-30,WINDOW_HEIGHT-30), 2)
+
+def draw_snake(snake_list):
+    """绘制渐变蛇身"""
+    head = snake_list[-1]
+    pygame.draw.rect(screen, SNAKE_HEAD, (head[0], head[1], BLOCK_SIZE-2, BLOCK_SIZE-2), border_radius=4)
+    for i, seg in enumerate(snake_list[:-1]):
+        color = SNAKE_BODY[i % len(SNAKE_BODY)]
+        pygame.draw.rect(screen, color, (seg[0], seg[1], BLOCK_SIZE-2, BLOCK_SIZE-2), border_radius=3)
+
+def draw_food(food_x, food_y, is_bonus=False):
+    """绘制食物（普通/加分）"""
+    color = FOOD_BONUS if is_bonus else FOOD_NORMAL
+    pygame.draw.rect(screen, color, (food_x, food_y, BLOCK_SIZE-2, BLOCK_SIZE-2), border_radius=6)
+
+def show_text(text, x, y, color=TEXT_COLOR, font=font_normal, center=True):
+    """统一文字绘制"""
+    surf = font.render(text, True, color)
+    rect = surf.get_rect()
+    if center:
+        rect.center = (x,y)
+    else:
+        rect.topleft = (x,y)
+    screen.blit(surf, rect)
+
+# ======================================
+# 游戏界面函数
+# ======================================
+def countdown():
+    """3秒倒计时"""
+    for i in range(3, 0, -1):
+        screen.fill(BG_COLOR)
+        draw_border()
+        show_text(f"游戏即将开始！", WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 80)
+        show_text(str(i), WINDOW_WIDTH//2, WINDOW_HEIGHT//2, font=font_title)
+        pygame.display.update()
+        pygame.time.wait(800)
+
+def pause_screen():
+    """暂停界面"""
+    overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+    overlay.set_alpha(180)
+    overlay.fill(BG_COLOR)
+    screen.blit(overlay, (0,0))
+    show_text("⏸ 游戏暂停", WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 50)
+    show_text("按 P 继续游戏", WINDOW_WIDTH//2, WINDOW_HEIGHT//2 + 20)
+    show_text("按 Q 退出游戏", WINDOW_WIDTH//2, WINDOW_HEIGHT//2 + 60)
+    pygame.display.update()
+
+def setting_screen():
+    """设置界面"""
+    global GRID_ENABLED, BASE_SPEED
+    while True:
+        screen.fill(BG_COLOR)
+        draw_border()
+        show_text("⚙️ 设置面板", WINDOW_WIDTH//2, 80, font=font_title)
+        show_text(f"网格背景: {'开启' if GRID_ENABLED else '关闭'} (G)", WINDOW_WIDTH//2, 200)
+        show_text(f"基础速度: {BASE_SPEED} (↑/↓ 调节)", WINDOW_WIDTH//2, 260)
+        show_text("按 B 返回主菜单", WINDOW_WIDTH//2, 400, color=TIP_COLOR)
+        pygame.display.update()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_g:
+                    GRID_ENABLED = not GRID_ENABLED
+                if event.key == pygame.K_UP:
+                    BASE_SPEED = min(BASE_SPEED+1, 15)
+                if event.key == pygame.K_DOWN:
+                    BASE_SPEED = max(BASE_SPEED-1, 5)
+                if event.key == pygame.K_b:
+                    return
+
+# ======================================
+# 主菜单界面
+# ======================================
+def main_menu():
+    high_score = load_high_score()
+    while True:
+        screen.fill(BG_COLOR)
+        draw_border()
+        draw_grid()
+        
+        show_text("🐍 贪吃蛇 豪华完整版", WINDOW_WIDTH//2, 100, font=font_title)
+        show_text(f"🏆 历史最高分: {high_score}", WINDOW_WIDTH//2, 200)
+        show_text("1. 开始游戏", WINDOW_WIDTH//2, 280)
+        show_text("2. 游戏设置", WINDOW_WIDTH//2, 330)
+        show_text("3. 退出游戏", WINDOW_WIDTH//2, 380)
+        show_text("操作: 方向键移动 | P暂停 | R重启", WINDOW_WIDTH//2, 520, color=TIP_COLOR, font=font_tip)
+
+        pygame.display.update()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    play_sound("start")
+                    return
+                if event.key == pygame.K_2:
+                    setting_screen()
+                if event.key == pygame.K_3:
+                    pygame.quit()
+                    sys.exit()
+
+# ======================================
+# 核心游戏循环
+# ======================================
+def game_loop():
+    # 游戏状态
+    game_over = False
+    game_close = False
+    game_pause = False
+    
+    # 蛇初始参数
+    x = WINDOW_WIDTH // 2
+    y = WINDOW_HEIGHT // 2
+    x_change = 0
+    y_change = 0
+    
+    # 蛇身体
+    snake_list = []
+    snake_length = 3
+    
+    # 食物生成
+    def gen_food():
+        while True:
+            fx = random.randrange(2, (WINDOW_WIDTH-BLOCK_SIZE)//BLOCK_SIZE) * BLOCK_SIZE
+            fy = random.randrange(2, (WINDOW_HEIGHT-BLOCK_SIZE)//BLOCK_SIZE) * BLOCK_SIZE
+            if [fx, fy] not in snake_list:
+                bonus = random.randint(1,10) == 1
+                return fx, fy, bonus
+    
+    food_x, food_y, food_bonus = gen_food()
+    score = 0
+    current_speed = BASE_SPEED
+
+    # 倒计时开局
+    countdown()
+
+    # 主游戏逻辑
+    while not game_over:
+        # 暂停处理
+        while game_pause:
+            pause_screen()
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_p:
+                        game_pause = False
+                    if event.key == pygame.K_q:
+                        game_over = True
+                        game_pause = False
+                if event.type == pygame.QUIT:
+                    game_over = True
+                    game_pause = False
+
+        # 游戏结束界面
+        while game_close:
+            save_high_score(score)
+            screen.fill(BG_COLOR)
+            draw_border()
+            show_text("💀 游戏结束", WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 100, font=font_title)
+            show_text(f"最终得分: {score}", WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 20)
+            show_text(f"最高记录: {load_high_score()}", WINDOW_WIDTH//2, WINDOW_HEIGHT//2 + 20)
+            show_text("R 重新开始 | Q 退出 | M 返回菜单", WINDOW_WIDTH//2, WINDOW_HEIGHT//2 + 80, color=TIP_COLOR)
+            pygame.display.update()
+
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_q:
+                        game_over = True
+                        game_close = False
+                    if event.key == pygame.K_r:
+                        game_loop()
+                    if event.key == pygame.K_m:
+                        main_menu()
+                        game_loop()
+                if event.type == pygame.QUIT:
+                    game_over = True
+                    game_close = False
+
+        # 事件监听
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                game_over = True
+            if event.type == pygame.KEYDOWN:
+                # 方向控制（禁止反向）
+                if event.key == pygame.K_LEFT and x_change == 0:
+                    x_change = -BLOCK_SIZE
+                    y_change = 0
+                elif event.key == pygame.K_RIGHT and x_change == 0:
+                    x_change = BLOCK_SIZE
+                    y_change = 0
+                elif event.key == pygame.K_UP and y_change == 0:
+                    y_change = -BLOCK_SIZE
+                    x_change = 0
+                elif event.key == pygame.K_DOWN and y_change == 0:
+                    y_change = BLOCK_SIZE
+                    x_change = 0
+                # 暂停
+                if event.key == pygame.K_p:
+                    game_pause = True
+                # 重启
+                if event.key == pygame.K_r:
+                    game_loop()
+
+        # 撞墙检测
+        if x < BLOCK_SIZE or x >= WINDOW_WIDTH-BLOCK_SIZE or y < BLOCK_SIZE or y >= WINDOW_HEIGHT-BLOCK_SIZE:
+            play_sound("die")
+            game_close = True
+
+        # 更新蛇位置
+        x += x_change
+        y += y_change
+        
+        # 绘制背景
+        screen.fill(BG_COLOR)
+        draw_grid()
+        draw_border()
+
+        # 更新蛇身体
+        snake_head = [x, y]
+        snake_list.append(snake_head)
+        if len(snake_list) > snake_length:
+            del snake_list[0]
+
+        # 自撞检测
+        for seg in snake_list[:-1]:
+            if seg == snake_head:
+                play_sound("die")
+                game_close = True
+
+        # 绘制元素
+        draw_food(food_x, food_y, food_bonus)
+        draw_snake(snake_list)
+
+        # 显示信息
+        show_text(f"分数: {score}", 20, 20, center=False)
+        show_text(f"速度: {current_speed}", WINDOW_WIDTH-150, 20, center=False)
+        show_text(f"最高分: {load_high_score()}", 20, 50, center=False, color=TIP_COLOR)
+
+        pygame.display.update()
+
+        # 吃食物逻辑
+        if x == food_x and y == food_y:
+            play_sound("eat")
+            add_score = 5 if food_bonus else 1
+            score += add_score
+            snake_length += 1
+            current_speed = min(BASE_SPEED + score//10, MAX_SPEED)
+            food_x, food_y, food_bonus = gen_food()
+
+        clock.tick(current_speed)
+
+    # 退出游戏
+    save_high_score(score)
+    pygame.quit()
+    sys.exit()
+
+# ======================================
+# 启动游戏
+# ======================================
+if __name__ == "__main__":
+    main_menu()
+    game_loop()
